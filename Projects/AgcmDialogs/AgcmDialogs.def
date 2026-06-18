@@ -1,6 +1,0 @@
-; AgcmDialogs.def : DLL에 대한 모듈 매개 변수를 정의합니다.
-
-LIBRARY      "AgcmDialogs"
-
-EXPORTS
-    ; 명시적 내보내기를 여기에 사용할 수 있습니다.
