@@ -115,3 +115,32 @@ Pour clarifier le périmètre et éviter toute confusion future :
 3. Croiser avec les structures packet/SQL d'ALEmu déjà documentées pour valider la cohérence des deux sources.
 4. Documenter la mécanique comprise dans le `docs/gameplay_*.md` correspondant du projet UE5, en langage/pseudocode neutre.
 5. Faire valider par Faf toute mécanique ambiguë avant implémentation (priorité à la précision sur la vitesse).
+
+---
+
+## 7. Analyse exhaustive en cours (mise à jour incrémentale)
+
+Une revue fichier par fichier de l'intégralité du dépôt est en cours (hors SDK tiers confirmés : STLport, XtreamToolKit, DirectX, Oracle OCI, FreeType, HShield/nProtect, RenderWare, DirectShow, FMOD — ~4750 fichiers / ~1,6M lignes de code propre au jeu à couvrir). Cette section est mise à jour à chaque système entièrement analysé. Le détail complet de chaque système est dans le projet `Archlord_UE5_Project` (`module_notes/`) ; ce qui suit est un résumé.
+
+### ✅ Système couvert intégralement : Siege War / Castle / Archlord
+
+**Découverte clé : le module `AgsmCastle` / `AgpmCastle` (section 1 et 2 ci-dessus) est un stub vide, jamais implémenté.** Toute la logique de château et de siège vit en réalité dans `Modules/AServer/AgsmSiegeWar/` (5884 lignes) et sa contrepartie `Modules/APublic/AgpmSiegeWar/`. À corriger mentalement par rapport aux sections précédentes de ce document.
+
+Points clés extraits (logique métier, pas de code copié) :
+
+- **Machine à états du siège** : `OFF → PROCLAIM_WAR → READY → START → BREAK_A_SEAL → OPEN_EYES → TIME_OVER`, avec embranchement spécial `ARCHLORD_BATTLE → TIME_OVER_ARCHLORD_BATTLE` pour le château de l'Archlord (le "roi" du serveur).
+- **Mécanique des "Yeux d'Archon"** : deux yeux à ouvrir séparément ; si le second n'ouvre pas dans le délai imparti, les deux se referment (échec, retour à zéro).
+- **Capture du château ("graver le sceau")** : un membre doit rester à portée du trône (1100 unités) pendant une durée fixe ; annulation automatique si le chef de guilde graveur se déconnecte.
+- **Château de l'Archlord** : se déroule le 4ème samedi du mois (les sièges normaux sont décalés d'une semaine s'ils tombent cette semaine-là) ; titre déchu si absence du porteur > 5 min pendant la phase de combat, ou en cas de mort n'importe où sur le serveur ; boss gardien "Dikain" (template ID 1366) spawné quand le château est vacant.
+- **Réduction de dégâts selon le type d'attaque contre les structures de siège** (table en dur) : distance 30%, mêlée 70%, arme de siège dédiée 100% (tours des Yeux d'Archon : invulnérables aux attaques normales). Classification arme à distance vs mêlée basée sur le type d'arme équipée ; classification des compétences basée sur leur rayon d'action (seuil à 500 unités).
+- **Persistance DB** : 4 tables déduites (`CASTLE`, `SIEGE`, `SIEGEAPPLICATION`, `SIEGEOBJECT`), sauvegarde automatique toutes les 60 secondes pendant un siège actif.
+- **Annonces de temps restant** : paliers fixes (50/40/30/20/10/9/8/7/6/5/4/3/2/1 minutes puis 50/40/30/20/10 secondes), un seul paquet réseau envoyé par changement de palier.
+- **Règles allié/ennemi en zone de siège** : même camp = allié, sauf cas spécial Archlord où deux guildes différentes sont toujours ennemies même si nominalement du même côté.
+
+**Implication architecture UE5** : le système original tourne sur un tick serveur périodique (polling), pas un modèle événementiel pur — à moderniser vers timers/event dispatchers UE5 plutôt que reproduire le polling. Les "statuts spéciaux" de personnage (bitmask) sont de bons candidats pour des Gameplay Tags / composants dédiés côté Gameplay Ability System.
+
+**Reste à couvrir pour clore totalement ce système** : `AgpmSiegeWar` (structures de données et formats de paquets, fichier le plus volumineux restant), `AgsmArchlord` (logique dédiée au titre, référencée massivement mais pas encore lue en détail), `AgsmEventSiegeWarNPC`, et le pendant client (`AgcmSiegeWar`, `AgcmUICastle`, `AgcmUISiegeWar` — optionnel, moins prioritaire pour une migration server-side).
+
+### 🔜 Prochaines vagues (ordre prévu)
+AgpmSiegeWar → AgsmArchlord → AgsmCombat/AgsmSkill (formules génériques) → AgsmCharacter/AgpmCharacter → AgsmItem/AgpmItem → AgsmGuild/AgpmGuild → AgsmDropItem(2) → systèmes sociaux/économiques (Party, Trade, Auction, Mail, Buddy, Quest, AI) → AUtility → AClient → Tools/Etc/Patch2/Projects (scan structurel).
+
